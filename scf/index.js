@@ -138,6 +138,34 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// "YYYY-MM-DD HH:MM" 转成分钟数，用于计算两次执行间隔
+function tsToMinutes(ts) {
+  const parts = ts.split(" ");
+  const d = parts[0].split("-").map(Number);
+  const t = parts[1].split(":").map(Number);
+  return Date.UTC(d[0], d[1] - 1, d[2], t[0], t[1]) / 60000;
+}
+function minutesBetween(a, b) {
+  return Math.abs(tsToMinutes(a) - tsToMinutes(b));
+}
+
+// 兼容旧格式：取记录时间戳
+function recTs(r) {
+  return r.ts || (r.date + " " + (r.time || ""));
+}
+
+// 清理历史：删除任何一条距离上一条记录 < 10 分钟的重复点（如手动测试/立即触发产生的）
+function dedupeRecords(records) {
+  if (!Array.isArray(records) || records.length < 2) return records;
+  const out = [];
+  for (const r of records) {
+    const prev = out[out.length - 1];
+    if (prev && minutesBetween(recTs(prev), recTs(r)) < 10) continue; // 视为重复，跳过
+    out.push(r);
+  }
+  return out;
+}
+
 async function fetchCurrentStore() {
   try {
     const res = await apiRequest("GET", `/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}`);
@@ -162,6 +190,7 @@ async function main() {
   store.pricePerKwh = reading.price || store.pricePerKwh || 1;
 
   let records = Array.isArray(store.records) ? store.records : [];
+  records = dedupeRecords(records); // 先清理历史重复点
   const prev = records.length ? records[records.length - 1] : null;
 
   // 计算自上一小时以来的消耗。若金额/电量上升 -> 判定为充值（到账净值即余额增加量）。
@@ -197,8 +226,17 @@ async function main() {
   };
 
   const last = records[records.length - 1];
-  if (last && last.ts === record.ts) records[records.length - 1] = record;
-  else records.push(record);
+  if (last && last.ts === record.ts) {
+    records[records.length - 1] = record;
+  } else if (last && minutesBetween(last.ts, record.ts) < 10) {
+    // 距上次执行不足 10 分钟（手动测试 / 触发器刚创建时的立即触发），
+    // 不新增点，只刷新最新余额，避免产生多余的点
+    last.remainingKwh = reading.remainingKwh;
+    last.remainingMoney = reading.remainingMoney;
+    last.time = record.time;
+  } else {
+    records.push(record);
+  }
 
   if (records.length > MAX_RECORDS) records = records.slice(records.length - MAX_RECORDS);
   store.records = records;
