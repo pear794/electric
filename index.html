@@ -57,6 +57,30 @@
     .chart-box { position: relative; width: 100%; height: 260px; }
     .chart-box canvas { display: block; width: 100%; height: 100%; }
     .legend-note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+    .chart-type-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin: 12px auto 2px;
+      width: fit-content;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .ct-btn {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 7px 18px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .ct-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
     footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
     .empty { text-align: center; color: var(--muted); padding: 30px 0; font-size: 14px; }
     @media (min-width: 640px) { .cards { grid-template-columns: repeat(4, 1fr); } }
@@ -86,12 +110,20 @@
       <h2>每小时用电费用</h2>
       <div class="sub">每小时的用电费用 = 上一小时余额 − 本小时余额；<b>红点</b> 表示该小时充值（余额上升，不计消耗）</div>
       <div class="chart-box"><canvas id="hourChart"></canvas></div>
+      <div class="chart-type-toggle" id="hour-toggle">
+        <button class="ct-btn active" data-type="line">折线</button>
+        <button class="ct-btn" data-type="bar">柱状</button>
+      </div>
     </section>
 
     <section class="panel">
       <h2>每日用电费用</h2>
       <div class="sub">当天 24 小时用电费用之和；充值当天已隔离充值影响（红色表示当天有过充值）</div>
       <div class="chart-box"><canvas id="dayChart"></canvas></div>
+      <div class="chart-type-toggle" id="day-toggle">
+        <button class="ct-btn active" data-type="bar">柱状</button>
+        <button class="ct-btn" data-type="line">折线</button>
+      </div>
       <div class="legend-note">说明：每次充值（如充 100 元）平台会收 0.6% 手续费，实际约到账 99.4 元。检测到余额上升即判定为充值，那一小时不计入消耗，从而不影响每天的真实用电统计。</div>
     </section>
 
@@ -182,7 +214,7 @@
       }
     }
 
-    function drawBars(canvas, labels, values, colors) {
+    function drawBars(canvas, labels, values, colors, opts) {
       const { ctx, w, h } = setupCanvas(canvas);
       ctx.clearRect(0, 0, w, h);
       const padL = 46, padR = 12, padT = 14, padB = 26;
@@ -226,6 +258,18 @@
         ctx.quadraticCurveTo(x + barW, y, x + barW, y + rr);
         ctx.lineTo(x + barW, baseY);
         ctx.closePath(); ctx.fill();
+      }
+
+      // 柱顶数值：数据点不多时显示，避免拥挤
+      if (opts && opts.showLabels && n <= 24) {
+        ctx.fillStyle = "#4a5568";
+        ctx.font = "10px sans-serif";
+        ctx.textAlign = "center";
+        for (let i = 0; i < n; i++) {
+          const v = Math.max(0, values[i]);
+          const y = toY(v);
+          ctx.fillText(v.toFixed(2), toX(i), y - 4);
+        }
       }
     }
 
@@ -282,12 +326,47 @@
       const hourBalance = hourRecs.map(r => r.remainingMoney);
       const hourCost = hourRecs.map(r => r.consumedCost);
       const hourMarks = hourRecs.map(r => r.recharged ? { color: RED } : null);
+      const hourBarColors = hourRecs.map(r => r.recharged ? RED : BAR);
+      const dayLabels = dates.map(dt => dt.slice(5));
+      const dayMarks = dates.map(dt => byDate[dt].recharged ? { color: RED } : null);
 
-      drawLine(document.getElementById("balanceChart"), hourLabels, hourBalance);
-      drawLine(document.getElementById("hourChart"), hourLabels, hourCost, hourMarks, { minZero: true });
-
-      drawBars(document.getElementById("dayChart"), dates.map(dt => dt.slice(5)), dailyCost, dailyColors);
+      view = { hourLabels, hourBalance, hourCost, hourMarks, hourBarColors, dayLabels, dailyCost, dailyColors, dayMarks };
+      drawCharts();
     }
+
+    let view = null;
+    let hourType = "line"; // 每小时用电：默认折线
+    let dayType = "bar";   // 每日用电：默认柱状
+
+    function drawCharts() {
+      if (!view) return;
+      drawLine(document.getElementById("balanceChart"), view.hourLabels, view.hourBalance);
+      if (hourType === "bar") {
+        drawBars(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourBarColors, { showLabels: true });
+      } else {
+        drawLine(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourMarks, { minZero: true });
+      }
+      if (dayType === "bar") {
+        drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true });
+      } else {
+        drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks, { minZero: true });
+      }
+    }
+
+    function bindToggle(toggleId, setter) {
+      const box = document.getElementById(toggleId);
+      if (!box) return;
+      const btns = box.querySelectorAll(".ct-btn");
+      btns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          setter(btn.dataset.type);
+          btns.forEach(b => b.classList.toggle("active", b === btn));
+          drawCharts();
+        });
+      });
+    }
+    bindToggle("hour-toggle", t => { hourType = t; });
+    bindToggle("day-toggle", t => { dayType = t; });
 
     async function load() {
       const meta = document.getElementById("meta");
