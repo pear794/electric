@@ -1,31 +1,26 @@
-name: 电费监控
+name: 发布电费看板
 
-# 每天北京时间 22:30 运行一次。
-# GitHub Actions 的 cron 使用 UTC，22:30 北京时间 = 14:30 UTC。
+# 抓取已改到国内 IP 的「腾讯云函数 SCF」执行（GitHub Actions 是境外 IP，会被电费平台用 405 拦截）。
+# 每个工作流只负责一件事：仓库 main 分支有更新时，把静态站点发布到 GitHub Pages。
 on:
-  schedule:
-    - cron: "30 14 * * *"
   push:
     branches: ["main"]
-  workflow_dispatch: {}   # 支持在 Actions 页面手动触发，方便测试
+  workflow_dispatch: {}   # 手动触发，方便测试
 
-# 需要写回数据 + 部署 Pages，所以给足权限
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
-# 同一时刻只跑一个，避免并发把数据文件写乱
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  scrape-deploy:
+  deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    # GitHub Pages 环境（在仓库 Settings > Pages 里把 Source 设为 "GitHub Actions"）
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -34,27 +29,6 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: 安装 Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: 抓取电费数据
-        run: node scripts/scrape.mjs
-
-      - name: 提交更新后的数据
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/electricity.json
-          if git diff --cached --quiet; then
-            echo "数据无变化，跳过提交。"
-          else
-            git commit -m "chore: 更新电费数据 $(date -u +%F_%T)"
-            git push
-          fi
-
-      # ---------- 部署静态站点到 GitHub Pages ----------
       - name: 配置 Pages
         uses: actions/configure-pages@v5
 

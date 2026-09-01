@@ -1,9 +1,10 @@
 # 宿舍电费自动监控（全自动 · 零成本 · 无需常开电脑）
 
-这是一个「每天自动抓取电表余额 → 计算每日消耗 → 网页折线图展示历史趋势」的
-**纯 GitHub 方案**：抓取逻辑跑在 GitHub Actions（免费额度，每天定时一次），
-网页托管在 GitHub Pages（免费），还能绑定你自己的域名。全程不需要任何自己的服务器，
-也不需要在本地电脑常开任何程序。
+这是一个「每天自动抓取电表余额 → 计算每日消耗 → 网页折线图展示历史趋势」的方案。
+由于电费平台会拦截境外/机房 IP（GitHub Actions 境外服务器抓取会返回 405），
+所以**抓取改由「腾讯云函数 SCF」（国内 IP）每天 22:30 定时执行**；
+网页托管在 **GitHub Pages**（免费），并绑定你自己的域名 `electric.buaili.com`。
+全程零成本、不需要自己的服务器、本地电脑无需常开。
 
 数据来源：辰域智控系统（cnyiot.com）的服务器端渲染充值页
 `http://www.wap.cnyiot.com/nat/pay.aspx?mid=19500908264`。
@@ -16,11 +17,13 @@
 
 ```
 electric/
-├── .github/workflows/electric.yml   # 定时抓取 + 提交数据 + 发布 Pages
-├── scripts/scrape.mjs               # 抓取脚本（无第三方依赖，Node 18+）
-├── data/electricity.json            # 数据仓库（每次抓取追加/更新一条记录）
+├── .github/workflows/electric.yml   # 仅负责：main 有更新时把站点发布到 GitHub Pages
+├── scf/index.js                     # 腾讯云函数 SCF：国内抓取 + 算每日消耗 + 写回仓库
+├── scripts/scrape.mjs               # 本地手动调试用的抓取脚本（可选）
+├── data/electricity.json            # 数据仓库（由 SCF 每日追加/更新一条记录）
 ├── index.html                       # 网页看板（原生 Canvas 自绘折线图，无第三方库）
-├── CNAME.example                    # 自定义域名模板（复制为 CNAME 并填写你的域名）
+├── CNAME                            # 自定义域名（内容：electric.buaili.com）
+├── TENCENT_SCF_SETUP.md             # 腾讯云 SCF 部署步骤（从这里开始）
 ├── package.json
 └── .gitignore
 ```
@@ -29,13 +32,14 @@ electric/
 
 ## 二、工作原理
 
-1. **每天 22:30（北京时间）**，GitHub Actions 触发 `electric.yml`。
-   实际上 GitHub Actions 的 `cron` 用 UTC，所以配置为 `30 14 * * *`（14:30 UTC = 22:30 北京时间）。
-2. 脚本 `scrape.mjs` 请求上面的余额页，用正则解析出 剩余电量 / 剩余金额 / 综合费用 / 表名。
-3. 把今天的读数追加到 `data/electricity.json`，并**自动算出每日消耗**：
+1. **每天 22:30（北京时间）**，腾讯云函数 SCF（国内 IP）被定时触发器唤醒。
+2. `scf/index.js` 请求余额页 `http://www.wap.cnyiot.com/nat/pay.aspx?mid=19500908264`，
+   用正则解析出 剩余电量 / 剩余金额 / 综合费用 / 表名。
+3. 把今天的读数追加/更新到 `data/electricity.json`，并**自动算出每日消耗**：
    `当日电费 = 前一日剩余金额 − 当日剩余金额`。
-4. 脚本用 `git commit + push` 把数据写回仓库（让仓库保持活跃，避免定时任务被 GitHub 自动停用）。
-5. 同一工作流调用 `actions/deploy-pages` 把静态站点发布到 GitHub Pages。
+4. SCF 通过 **GitHub Contents API** 把该 JSON 写回仓库（需要你在 SCF 里配一个 GitHub Token）。
+5. 写回触发 GitHub 的 `on: push` → `.github/workflows/electric.yml` 执行，
+   调用 `actions/deploy-pages` 把静态站点发布到 GitHub Pages。
 6. `index.html` 在浏览器里 `fetch("./data/electricity.json")`，用**原生 Canvas 自绘**出：
    - **剩余金额走势折线图**（核心）
    - **每日用电费用柱状图**
@@ -49,6 +53,10 @@ electric/
 ---
 
 ## 三、部署步骤
+
+**部署请直接看 [`TENCENT_SCF_SETUP.md`](./TENCENT_SCF_SETUP.md)**，
+它覆盖了：创建 GitHub 细粒度 Token → 创建腾讯云云函数 SCF → 贴代码 → 配环境变量 →
+调超时 → 设定时触发器 → 手动测试。下面是已经完成的部分存档。
 
 ### 第 1 步：把项目推到 GitHub
 
