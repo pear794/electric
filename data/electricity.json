@@ -48,23 +48,23 @@
     },
     {
       "date": "2026-09-01",
-      "time": "21:01",
-      "ts": "2026-09-01 21:01",
-      "remainingKwh": 41.4,
-      "remainingMoney": 41.4,
-      "consumedKwh": 0,
-      "consumedCost": 0,
-      "recharged": false,
-      "topup": 0
-    },
-    {
-      "date": "2026-09-01",
       "time": "22:00",
       "ts": "2026-09-01 22:00",
       "remainingKwh": 40.99,
       "remainingMoney": 40.99,
       "consumedKwh": 0.41,
       "consumedCost": 0.41,
+      "recharged": false,
+      "topup": 0
+    },
+    {
+      "date": "2026-09-01",
+      "time": "23:00",
+      "ts": "2026-09-01 23:00",
+      "remainingKwh": 40.11,
+      "remainingMoney": 40.11,
+      "consumedKwh": 0.88,
+      "consumedCost": 0.88,
       "recharged": false,
       "topup": 0
     }
