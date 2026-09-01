@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0064ff" />
   <title>电费监控</title>
   <style>
     :root {
@@ -22,41 +23,41 @@
       background: var(--bg);
       color: var(--text);
     }
-    .wrap { max-width: 960px; margin: 0 auto; padding: 20px 14px 60px; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 16px 12px 50px; }
     header {
       background: linear-gradient(45deg, var(--primary), var(--accent));
       border-radius: 16px;
-      padding: 22px 20px;
+      padding: 18px 16px;
       color: #fff;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
-    header h1 { margin: 0; font-size: 20px; font-weight: 700; }
-    header p { margin: 6px 0 0; font-size: 13px; opacity: .9; }
-    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+    header h1 { margin: 0; font-size: 19px; font-weight: 700; }
+    header p { margin: 6px 0 0; font-size: 12px; opacity: .92; word-break: break-all; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 16px;
+      padding: 14px;
     }
-    .card .label { font-size: 12px; color: var(--muted); }
-    .card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
-    .card .value small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+    .card .label { font-size: 11px; color: var(--muted); }
+    .card .value { font-size: 24px; font-weight: 700; margin-top: 5px; }
+    .card .value small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 2px; }
     .card.hl .value { color: var(--primary); }
+    .card .hint { font-size: 10px; color: var(--muted); margin-top: 3px; }
     .panel {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 18px;
+      padding: 16px;
+      margin-bottom: 16px;
     }
-    .panel h2 { margin: 0 0 6px; font-size: 15px; }
-    .panel .sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-    .chart-box { position: relative; width: 100%; height: 300px; }
-    .chart-box.tall { height: 250px; }
-    .legend-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
-    .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
-    footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .panel h2 { margin: 0 0 5px; font-size: 15px; }
+    .panel .sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+    .chart-box { position: relative; width: 100%; height: 260px; }
+    .legend-note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+    footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .empty { text-align: center; color: var(--muted); padding: 30px 0; font-size: 14px; }
     @media (min-width: 640px) { .cards { grid-template-columns: repeat(4, 1fr); } }
   </style>
 </head>
@@ -70,24 +71,30 @@
     <section class="cards" id="cards">
       <div class="card hl"><div class="label">当前剩余金额</div><div class="value" id="c-balance">–</div></div>
       <div class="card"><div class="label">当前剩余电量</div><div class="value" id="c-kwh">–</div></div>
-      <div class="card"><div class="label">今日电费</div><div class="value" id="c-today">–</div></div>
+      <div class="card"><div class="label">今日电费</div><div class="value" id="c-today">–</div><div class="hint" id="c-today-recharge"></div></div>
       <div class="card"><div class="label">平均每日电费</div><div class="value" id="c-avg">–</div></div>
     </section>
 
     <section class="panel">
-      <h2>剩余金额走势</h2>
-      <div class="sub">每天 22:30 抓取一次，余额随用电下降、充值上升</div>
+      <h2>剩余金额走势（每小时）</h2>
+      <div class="sub">每小时整点抓取一次，余额随用电下降、充值上升（近 7 天）</div>
       <div class="chart-box"><canvas id="balanceChart"></canvas></div>
     </section>
 
     <section class="panel">
-      <h2>每日用电费用</h2>
-      <div class="sub">每天消耗的电费 = 前一日余额 − 当日余额</div>
-      <div class="chart-box tall"><canvas id="costChart"></canvas></div>
-      <div class="legend-note">提示：检测到充值的当天无法靠「余额差值」算出真实消耗，该柱会显示为红色并计为 0（充值会使余额上升）。想更精确可把抓取频率改为每小时。</div>
+      <h2>每小时用电费用</h2>
+      <div class="sub">每小时的用电费用 = 上一小时余额 − 本小时余额；<b>红点</b> 表示该小时充值（余额上升，不计消耗）</div>
+      <div class="chart-box"><canvas id="hourChart"></canvas></div>
     </section>
 
-    <footer>数据由 GitHub Actions 每日自动抓取 · 页面托管在 GitHub Pages</footer>
+    <section class="panel">
+      <h2>每日用电费用</h2>
+      <div class="sub">当天 24 小时用电费用之和；充值当天已隔离充值影响（红色表示当天有过充值）</div>
+      <div class="chart-box"><canvas id="dayChart"></canvas></div>
+      <div class="legend-note">说明：每次充值（如充 100 元）平台会收 0.6% 手续费，实际约到账 99.4 元。检测到余额上升即判定为充值，那一小时不计入消耗，从而不影响每天的真实用电统计。</div>
+    </section>
+
+    <footer>数据由腾讯云函数 SCF 每小时自动抓取 · 页面托管在 GitHub Pages</footer>
   </div>
 
   <script>
@@ -97,6 +104,7 @@
     const RED = "#ff6b5e";
     const GRID = "#eef1f6";
     const MUTED = "#8a94a6";
+    const HOURLY_WINDOW = 168; // 每小时图显示最近 168 个点（7 天）
 
     function hexToRgba(hex, a) {
       const h = hex.replace("#", "");
@@ -117,13 +125,12 @@
       return { ctx, w, h };
     }
 
-    // 通用横轴刻度：最多显示约 8 个标签
-    function xStep(n) { return Math.max(1, Math.ceil(n / 8)); }
+    function xStep(n) { return Math.max(1, Math.ceil(n / 7)); }
 
-    function drawLine(canvas, labels, values) {
+    function drawLine(canvas, labels, values, marks) {
       const { ctx, w, h } = setupCanvas(canvas);
       ctx.clearRect(0, 0, w, h);
-      const padL = 46, padR = 14, padT = 14, padB = 26;
+      const padL = 46, padR = 12, padT = 14, padB = 26;
       const plotW = w - padL - padR, plotH = h - padT - padB;
       const n = values.length;
       if (n === 0) return;
@@ -135,7 +142,6 @@
       const toX = i => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
       const toY = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
 
-      // 网格 + 纵轴刻度
       ctx.strokeStyle = GRID; ctx.lineWidth = 1;
       ctx.fillStyle = MUTED; ctx.font = "11px sans-serif"; ctx.textAlign = "right";
       const ticks = 4;
@@ -146,35 +152,35 @@
         ctx.fillText(v.toFixed(2), padL - 6, y + 3);
       }
 
-      // 横轴标签
       ctx.textAlign = "center";
       const step = xStep(n);
       for (let i = 0; i < n; i += step) ctx.fillText(labels[i], toX(i), h - padB + 14);
 
-      // 面积填充
+      // 面积
       ctx.beginPath();
       ctx.moveTo(toX(0), toY(values[0]));
       for (let i = 1; i < n; i++) ctx.lineTo(toX(i), toY(values[i]));
       ctx.lineTo(toX(n - 1), padT + plotH); ctx.lineTo(toX(0), padT + plotH); ctx.closePath();
       ctx.fillStyle = hexToRgba(BLUE, 0.10); ctx.fill();
 
-      // 折线
+      // 线
       ctx.beginPath();
       ctx.moveTo(toX(0), toY(values[0]));
       for (let i = 1; i < n; i++) ctx.lineTo(toX(i), toY(values[i]));
-      ctx.strokeStyle = BLUE; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
+      ctx.strokeStyle = BLUE; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke();
 
-      // 数据点
+      // 普通点
+      const r = n > 100 ? 1 : 2.5;
       for (let i = 0; i < n; i++) {
-        ctx.beginPath(); ctx.arc(toX(i), toY(values[i]), 3, 0, Math.PI * 2);
-        ctx.fillStyle = BLUE; ctx.fill();
+        ctx.beginPath(); ctx.arc(toX(i), toY(values[i]), r, 0, Math.PI * 2);
+        ctx.fillStyle = marks && marks[i] ? (marks[i].color || BLUE) : BLUE; ctx.fill();
       }
     }
 
     function drawBars(canvas, labels, values, colors) {
       const { ctx, w, h } = setupCanvas(canvas);
       ctx.clearRect(0, 0, w, h);
-      const padL = 46, padR = 14, padT = 14, padB = 26;
+      const padL = 46, padR = 12, padT = 14, padB = 26;
       const plotW = w - padL - padR, plotH = h - padT - padB;
       const n = values.length;
       if (n === 0) return;
@@ -185,7 +191,6 @@
       const barW = Math.max(2, (plotW / n) * 0.6);
       const baseY = padT + plotH;
 
-      // 网格 + 纵轴
       ctx.strokeStyle = GRID; ctx.lineWidth = 1;
       ctx.fillStyle = MUTED; ctx.font = "11px sans-serif"; ctx.textAlign = "right";
       const ticks = 4;
@@ -196,54 +201,87 @@
         ctx.fillText(v.toFixed(2), padL - 6, y + 3);
       }
 
-      // 横轴标签
       ctx.textAlign = "center";
       const step = xStep(n);
       for (let i = 0; i < n; i += step) ctx.fillText(labels[i], toX(i), h - padB + 14);
 
-      // 柱子（顶部圆角）
       for (let i = 0; i < n; i++) {
         const v = Math.max(0, values[i]);
         const x = toX(i) - barW / 2;
         const y = toY(v);
         const bh = baseY - y;
         if (bh <= 0.5) continue;
-        const r = Math.min(4, barW / 2, bh);
+        const rr = Math.min(4, barW / 2, bh);
         ctx.fillStyle = colors[i];
         ctx.beginPath();
         ctx.moveTo(x, baseY);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.lineTo(x + barW - r, y);
-        ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+        ctx.lineTo(x, y + rr);
+        ctx.quadraticCurveTo(x, y, x + rr, y);
+        ctx.lineTo(x + barW - rr, y);
+        ctx.quadraticCurveTo(x + barW, y, x + barW, y + rr);
         ctx.lineTo(x + barW, baseY);
         ctx.closePath(); ctx.fill();
       }
     }
 
+    // "MM-DD HH:MM" 或 "MM-DD" -> 原样（已按需要缩短）
+    function parseRecords(recs) {
+      return recs.map(r => ({
+        date: r.date,
+        ts: r.ts || (r.date + " " + (r.time || "")),
+        remainingKwh: Number(r.remainingKwh),
+        remainingMoney: Number(r.remainingMoney),
+        consumedCost: Number(r.consumedCost) || 0,
+        recharged: !!r.recharged,
+      })).filter(r => !isNaN(r.remainingMoney));
+    }
+
     let cache = null;
 
     function render(d) {
-      const recs = Array.isArray(d.records) ? d.records : [];
+      const recs = parseRecords(Array.isArray(d.records) ? d.records : []);
+      const meta = document.getElementById("meta");
       const last = recs[recs.length - 1];
-      document.getElementById("meta").textContent =
-        `表名：${d.meterName || "–"} · 表号：${d.meterNo || "–"} · 单价 ${d.pricePerKwh || 1} 元/kWh`;
+      if (!last) {
+        meta.textContent = "暂无数据，等待首次抓取。";
+        return;
+      }
 
+      meta.textContent = `表名：${d.meterName || "–"} · 表号：${d.meterNo || "–"} · 单价 ${d.pricePerKwh || 1} 元/kWh`;
       document.getElementById("c-balance").innerHTML = `${fmt(last.remainingMoney)}<small>元</small>`;
       document.getElementById("c-kwh").innerHTML = `${fmt(last.remainingKwh)}<small>kWh</small>`;
-      document.getElementById("c-today").innerHTML = `${fmt(last.consumedCost)}<small>元</small>`;
 
-      const costs = recs.map(r => r.consumedCost).filter(v => !isNaN(v));
-      const avg = costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : 0;
+      // 按日期聚合每日费用
+      const byDate = {};
+      recs.forEach(r => {
+        if (!byDate[r.date]) byDate[r.date] = { cost: 0, recharged: false };
+        byDate[r.date].cost += r.consumedCost;
+        if (r.recharged) byDate[r.date].recharged = true;
+      });
+      const dates = Object.keys(byDate).sort();
+      const dailyCost = dates.map(dt => Math.round(byDate[dt].cost * 100) / 100);
+      const dailyColors = dates.map(dt => byDate[dt].recharged ? RED : BAR);
+
+      // 今日
+      const todayKey = last.date;
+      const todayCost = byDate[todayKey] ? byDate[todayKey].cost : 0;
+      document.getElementById("c-today").innerHTML = `${fmt(todayCost)}<small>元</small>`;
+      document.getElementById("c-today-recharge").textContent = byDate[todayKey] && byDate[todayKey].recharged ? "今日有充值（已隔离）" : "";
+
+      const avg = dailyCost.length ? dailyCost.reduce((a, b) => a + b, 0) / dailyCost.length : 0;
       document.getElementById("c-avg").innerHTML = `${fmt(avg)}<small>元</small>`;
 
-      const dates = recs.map(r => r.date.slice(5));
-      const balance = recs.map(r => r.remainingMoney);
-      const dailyCost = recs.map(r => r.consumedCost);
-      const barColors = recs.map(r => r.recharged ? RED : BAR);
+      // 每小时图：取最近 HOURLY_WINDOW 个点
+      const hourRecs = recs.slice(-HOURLY_WINDOW);
+      const hourLabels = hourRecs.map(r => r.ts.slice(5)); // "MM-DD HH:MM"
+      const hourBalance = hourRecs.map(r => r.remainingMoney);
+      const hourCost = hourRecs.map(r => r.consumedCost);
+      const hourMarks = hourRecs.map(r => r.recharged ? { color: RED } : null);
 
-      drawLine(document.getElementById("balanceChart"), dates, balance);
-      drawBars(document.getElementById("costChart"), dates, dailyCost, barColors);
+      drawLine(document.getElementById("balanceChart"), hourLabels, hourBalance);
+      drawLine(document.getElementById("hourChart"), hourLabels, hourCost, hourMarks);
+
+      drawBars(document.getElementById("dayChart"), dates.map(dt => dt.slice(5)), dailyCost, dailyColors);
     }
 
     async function load() {
@@ -259,7 +297,6 @@
         document.querySelectorAll(".panel").forEach(p => (p.style.display = "none"));
         return;
       }
-
       const recs = Array.isArray(data.records) ? data.records : [];
       if (!recs.length) {
         meta.textContent = "暂无数据，等待首次抓取。";
@@ -267,7 +304,6 @@
         document.querySelectorAll(".panel").forEach(p => (p.style.display = "none"));
         return;
       }
-
       cache = data;
       document.getElementById("cards").style.display = "";
       document.querySelectorAll(".panel").forEach(p => (p.style.display = ""));

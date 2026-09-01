@@ -1,10 +1,10 @@
 /**
- * 电费监控 —— 腾讯云函数（SCF）抓取与数据写回
+ * 电费监控 —— 腾讯云函数（SCF）抓取与数据写回（每小时一个点）
  *
  * 运行位置：腾讯云 SCF（建议选 广州/上海 等国内区域）。国内 IP 才能抓到电费数据
  * （境外/机房 IP 会被电费平台返回 405 拦截）。
  *
- * 触发方式：定时触发器，每天 22:30 北京时间（cron：0 30 22 * * * *）。
+ * 触发方式：定时触发器，每小时整点一次（cron：0 0 * * * ? *）。
  *
  * 需要配置的环境变量（在 SCF 的「函数配置 → 环境变量」里填）：
  *   GITHUB_TOKEN  必填，GitHub 细粒度 Token（仅对该仓库 Contents 读写权限）
@@ -21,10 +21,10 @@ const REPO = process.env.GITHUB_REPO || "pear794/electric";
 const BRANCH = process.env.GITHUB_BRANCH || "main";
 const FILE_PATH = "data/electricity.json"; // 仓库内数据文件路径
 const TOKEN = process.env.GITHUB_TOKEN;
+const MAX_RECORDS = 5000; // 最多保留近 ~208 天的每小时数据
 
 const CNYIOT_URL = `http://www.wap.cnyiot.com/nat/pay.aspx?mid=${METER_NO}`;
 
-/** 通用 GET 文本（origin 抓取用 http）。 */
 function fetchText(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("https") ? https : http;
@@ -59,7 +59,6 @@ function fetchText(url) {
   });
 }
 
-/** 通用 GitHub API 请求，返回解析后的 JSON。 */
 function apiRequest(method, path, bodyObj) {
   return new Promise((resolve, reject) => {
     const data = bodyObj ? JSON.stringify(bodyObj) : null;
@@ -128,7 +127,11 @@ function parse(html) {
 function beijingNow() {
   const d = new Date(Date.now() + 8 * 3600 * 1000);
   const iso = d.toISOString();
-  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+  return {
+    date: iso.slice(0, 10),
+    time: iso.slice(11, 16),
+    ts: iso.slice(0, 16).replace("T", " "),
+  };
 }
 
 function round2(n) {
@@ -149,39 +152,42 @@ async function fetchCurrentStore() {
 async function main() {
   if (!TOKEN) throw new Error("缺少环境变量 GITHUB_TOKEN");
 
-  // 1. 抓取
   const html = await fetchText(CNYIOT_URL);
   const reading = parse(html);
   const now = beijingNow();
 
-  // 2. 读取上一份数据
   const { store, sha } = await fetchCurrentStore();
   store.meterNo = reading.meterNo || store.meterNo || METER_NO;
   store.meterName = reading.meterName || store.meterName || "";
   store.pricePerKwh = reading.price || store.pricePerKwh || 1;
 
-  const records = Array.isArray(store.records) ? store.records : [];
+  let records = Array.isArray(store.records) ? store.records : [];
   const prev = records.length ? records[records.length - 1] : null;
 
+  // 计算自上一小时以来的消耗。若金额/电量上升 -> 判定为充值（到账净值即余额增加量）。
   let consumedKwh = 0;
   let consumedCost = 0;
   let recharged = false;
   let topup = 0;
-  if (prev && prev.date !== now.date) {
-    const dropKwh = round2(prev.remainingKwh - reading.remainingKwh);
-    const dropMoney = round2(prev.remainingMoney - reading.remainingMoney);
-    if (dropKwh > 0) {
-      consumedKwh = dropKwh;
-      consumedCost = round2(consumedKwh * store.pricePerKwh);
-    } else {
+
+  if (prev) {
+    const deltaMoney = round2(reading.remainingMoney - prev.remainingMoney);
+    const deltaKwh = round2(reading.remainingKwh - prev.remainingKwh);
+    if (deltaMoney > 0) {
+      // 余额上升 = 充值（平台扣手续费后实际到账即余额增加量，如充100到账99.4）
       recharged = true;
-      topup = round2(dropMoney > 0 ? 0 : -dropMoney);
+      topup = deltaMoney;
+    } else {
+      consumedKwh = round2(prev.remainingKwh - reading.remainingKwh);
+      if (consumedKwh < 0) consumedKwh = 0;
+      consumedCost = round2(consumedKwh * store.pricePerKwh);
     }
   }
 
   const record = {
     date: now.date,
     time: now.time,
+    ts: now.ts,
     remainingKwh: reading.remainingKwh,
     remainingMoney: reading.remainingMoney,
     consumedKwh: round2(consumedKwh),
@@ -191,18 +197,15 @@ async function main() {
   };
 
   const last = records[records.length - 1];
-  if (last && last.date === record.date) records[records.length - 1] = record;
+  if (last && last.ts === record.ts) records[records.length - 1] = record;
   else records.push(record);
+
+  if (records.length > MAX_RECORDS) records = records.slice(records.length - MAX_RECORDS);
   store.records = records;
 
-  // 3. 写回 GitHub
   const content = Buffer.from(JSON.stringify(store, null, 2) + "\n").toString("base64");
-  const body = {
-    message: `chore: 更新电费数据 ${now.date}`,
-    content,
-    branch: BRANCH,
-  };
-  if (sha) body.sha = sha; // 已存在则更新；不存在则为新建
+  const body = { message: `chore: 更新电费数据 ${now.ts}`, content, branch: BRANCH };
+  if (sha) body.sha = sha;
 
   await apiRequest("PUT", `/repos/${REPO}/contents/${FILE_PATH}`, body);
 
@@ -215,12 +218,12 @@ async function main() {
     consumedKwh,
     consumedCost,
     recharged,
-    date: now.date,
+    topup,
+    ts: now.ts,
     records: records.length,
   };
 }
 
-// 腾讯云 SCF 异步处理器入口（在控制台填 Handler 为 index.main_handler）
 exports.main_handler = async (event, context) => {
   try {
     const result = await main();
