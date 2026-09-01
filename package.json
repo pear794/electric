@@ -1,0 +1,10 @@
+{
+  "name": "dorm-elec-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "宿舍电费自动监控：GitHub Actions 每日抓取 + GitHub Pages 折线图展示",
+  "scripts": {
+    "scrape": "node scripts/scrape.mjs"
+  }
+}

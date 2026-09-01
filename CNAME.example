@@ -1,0 +1,13 @@
+# 把这个文件改名为 CNAME，内容是你要绑定的域名（不要带协议头 https://）。
+# 然后把下面的域名换成你自己的，例如：electric.example.com
+# 注意：CNAME 只能填一个域名（通常是子域名）。
+#
+# 之后还需要：
+#   1) 在域名服务商处添加 DNS 解析：
+#        CNAME  electric.example.com  ->  <你的GitHub用户名>.github.io
+#      （如果是顶级域名如 example.com，则用 A 记录指向 GitHub Pages 的 IP，
+#        详见 README。）
+#   2) 到仓库 Settings > Pages > Custom domain 填写同一个域名并保存。
+#   3) 等待 DNS 生效（通常几分钟到几小时）。
+
+electric.example.com
