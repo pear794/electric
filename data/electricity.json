@@ -5,9 +5,9 @@
   "records": [
     {
       "date": "2026-09-01",
-      "time": "18:09",
-      "remainingKwh": 43.11,
-      "remainingMoney": 43.11,
+      "time": "18:59",
+      "remainingKwh": 42.9,
+      "remainingMoney": 42.9,
       "consumedKwh": 0,
       "consumedCost": 0,
       "recharged": false,
