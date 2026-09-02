@@ -151,8 +151,9 @@
       const dpr = window.devicePixelRatio || 1;
       const box = canvas.closest(".chart-box");
       const availW = (box ? box.clientWidth : (canvas.parentElement ? canvas.parentElement.clientWidth : 300)) || 300;
+      const MAX_W = 4200; // 限制画布最大宽度，避免手机上内存过大；点过多时标签会自动隐藏
       // 让画布比容器更宽：点越多越宽，从而可横向滚动
-      const targetW = Math.max(availW, (n || 1) * (minStep || 16));
+      const targetW = Math.min(Math.max(availW, (n || 1) * (minStep || 16)), MAX_W);
       canvas.style.width = targetW + "px";
       // 设完宽度后再测高度，避免横向滚动条占用高度导致纵向溢出
       const targetH = (box ? box.clientHeight : 260) || 260;
@@ -223,6 +224,16 @@
         ctx.beginPath(); ctx.arc(toX(i), toY(values[i]), r, 0, Math.PI * 2);
         ctx.fillStyle = marks && marks[i] ? (marks[i].color || BLUE) : BLUE; ctx.fill();
       }
+
+      // 点位数值（可开关）：每点上方显示对应数字（间距够才显示，避免重叠）
+      if (opts.showLabels && plotW / Math.max(1, n - 1) >= 26) {
+        ctx.fillStyle = "#4a5568";
+        ctx.font = "10px sans-serif";
+        ctx.textAlign = "center";
+        for (let i = 0; i < n; i++) {
+          ctx.fillText(values[i].toFixed(2), toX(i), toY(values[i]) - 8);
+        }
+      }
     }
 
     function drawBars(canvas, labels, values, colors, opts) {
@@ -273,8 +284,8 @@
         ctx.closePath(); ctx.fill();
       }
 
-      // 柱顶数值：间距足够宽时可全部显示，避免拥挤
-      if (opts.showLabels) {
+      // 柱顶数值：间距够宽时才全部显示，避免拥挤
+      if (opts.showLabels && plotW / Math.max(1, n) >= 26) {
         ctx.fillStyle = "#4a5568";
         ctx.font = "10px sans-serif";
         ctx.textAlign = "center";
@@ -354,16 +365,16 @@
 
     function drawCharts() {
       if (!view) return;
-      drawLine(document.getElementById("balanceChart"), view.hourLabels, view.hourBalance, null, { minStep: 16 });
+      drawLine(document.getElementById("balanceChart"), view.hourLabels, view.hourBalance, null, { showLabels: true, minStep: 40 });
       if (hourType === "bar") {
         drawBars(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourBarColors, { showLabels: true, minStep: 44 });
       } else {
-        drawLine(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourMarks, { minZero: true, minStep: 16 });
+        drawLine(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourMarks, { minZero: true, showLabels: true, minStep: 40 });
       }
       if (dayType === "bar") {
         drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true, minStep: 44 });
       } else {
-        drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks, { minZero: true, minStep: 34 });
+        drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks, { minZero: true, showLabels: true, minStep: 44 });
       }
     }
 
