@@ -215,6 +215,7 @@ async function main() {
 
   const record = {
     date: now.date,
+    day: prev ? prev.date : now.date, // 归属日：00:00 的电费归到上一条记录那天，避免跨天错位
     time: now.time,
     ts: now.ts,
     remainingKwh: reading.remainingKwh,
