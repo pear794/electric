@@ -273,8 +273,8 @@
         ctx.closePath(); ctx.fill();
       }
 
-      // 柱顶数值：数据点不多时显示，避免拥挤
-      if (opts.showLabels && n <= 24) {
+      // 柱顶数值：间距足够宽时可全部显示，避免拥挤
+      if (opts.showLabels) {
         ctx.fillStyle = "#4a5568";
         ctx.font = "10px sans-serif";
         ctx.textAlign = "center";
@@ -356,12 +356,12 @@
       if (!view) return;
       drawLine(document.getElementById("balanceChart"), view.hourLabels, view.hourBalance, null, { minStep: 16 });
       if (hourType === "bar") {
-        drawBars(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourBarColors, { showLabels: true, minStep: 16 });
+        drawBars(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourBarColors, { showLabels: true, minStep: 44 });
       } else {
         drawLine(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourMarks, { minZero: true, minStep: 16 });
       }
       if (dayType === "bar") {
-        drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true, minStep: 34 });
+        drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true, minStep: 44 });
       } else {
         drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks, { minZero: true, minStep: 34 });
       }
