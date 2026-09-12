@@ -81,6 +81,27 @@
       user-select: none;
     }
     .ct-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex: 0 0 auto; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #cfd7e3; border-radius: 999px; transition: .2s;
+    }
+    .switch .slider::before {
+      content: ""; position: absolute; height: 18px; width: 18px; left: 2px; top: 2px;
+      background: #fff; border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: var(--primary); }
+    .switch input:checked + .slider::before { transform: translateX(18px); }
     footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
     .empty { text-align: center; color: var(--muted); padding: 30px 0; font-size: 14px; }
     @media (min-width: 640px) { .cards { grid-template-columns: repeat(4, 1fr); } }
@@ -102,8 +123,12 @@
 
     <section class="panel">
       <h2>剩余金额走势（每小时）</h2>
-      <div class="sub">每小时整点抓取一次，余额随用电下降、充值上升（近 7 天）</div>
+      <div class="sub">每小时整点抓取一次，余额随用电下降、充值上升</div>
       <div class="chart-box"><canvas id="balanceChart"></canvas></div>
+      <div class="switch-row">
+        <span>显示全部数据</span>
+        <label class="switch"><input type="checkbox" id="balance-all"><span class="slider"></span></label>
+      </div>
     </section>
 
     <section class="panel">
@@ -113,6 +138,10 @@
       <div class="chart-type-toggle" id="hour-toggle">
         <button class="ct-btn active" data-type="line">折线</button>
         <button class="ct-btn" data-type="bar">柱状</button>
+      </div>
+      <div class="switch-row">
+        <span>显示全部数据</span>
+        <label class="switch"><input type="checkbox" id="hour-all"><span class="slider"></span></label>
       </div>
     </section>
 
@@ -137,7 +166,6 @@
     const RED = "#ff6b5e";
     const GRID = "#eef1f6";
     const MUTED = "#8a94a6";
-    const HOURLY_WINDOW = 168; // 每小时图显示最近 168 个点（7 天）
 
     function hexToRgba(hex, a) {
       const h = hex.replace("#", "");
@@ -345,31 +373,39 @@
       const avg = dailyCost.length ? dailyCost.reduce((a, b) => a + b, 0) / dailyCost.length : 0;
       document.getElementById("c-avg").innerHTML = `${fmt(avg)}<small>元</small>`;
 
-      // 每小时图：取最近 HOURLY_WINDOW 个点
-      const hourRecs = recs.slice(-HOURLY_WINDOW);
-      const hourLabels = hourRecs.map(r => r.ts.slice(5)); // "MM-DD HH:MM"
-      const hourBalance = hourRecs.map(r => r.remainingMoney);
-      const hourCost = hourRecs.map(r => r.consumedCost);
-      const hourMarks = hourRecs.map(r => r.recharged ? { color: RED } : null);
-      const hourBarColors = hourRecs.map(r => r.recharged ? RED : BAR);
+      // 每小时视图：默认只看最近两天（约48个点，数字能显示），开关打开则看全部
+      const DFLT_HOURS = 48;
+      const mkHour = (list) => ({
+        labels: list.map(r => r.ts.slice(5)),
+        balance: list.map(r => r.remainingMoney),
+        cost: list.map(r => r.consumedCost),
+        marks: list.map(r => r.recharged ? { color: RED } : null),
+        barColors: list.map(r => r.recharged ? RED : BAR),
+      });
       const dayLabels = dates.map(dt => dt.slice(5));
       const dayMarks = dates.map(dt => byDate[dt].recharged ? { color: RED } : null);
 
-      view = { hourLabels, hourBalance, hourCost, hourMarks, hourBarColors, dayLabels, dailyCost, dailyColors, dayMarks };
+      view = {
+        balance: mkHour(balanceShowAll ? recs : recs.slice(-DFLT_HOURS)),
+        hour: mkHour(hourShowAll ? recs : recs.slice(-DFLT_HOURS)),
+        dayLabels, dailyCost, dailyColors, dayMarks,
+      };
       drawCharts();
     }
 
     let view = null;
-    let hourType = "line"; // 每小时用电：默认折线
-    let dayType = "bar";   // 每日用电：默认柱状
+    let hourType = "line";   // 每小时用电：默认折线
+    let dayType = "bar";     // 每日用电：默认柱状
+    let balanceShowAll = false; // 剩余走势：默认只显示最近两天
+    let hourShowAll = false;    // 每小时用电：默认只显示最近两天
 
     function drawCharts() {
       if (!view) return;
-      drawLine(document.getElementById("balanceChart"), view.hourLabels, view.hourBalance, null, { showLabels: true, minStep: 40 });
+      drawLine(document.getElementById("balanceChart"), view.balance.labels, view.balance.balance, null, { showLabels: true, minStep: 40 });
       if (hourType === "bar") {
-        drawBars(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourBarColors, { showLabels: true, minStep: 44 });
+        drawBars(document.getElementById("hourChart"), view.hour.labels, view.hour.cost, view.hour.barColors, { showLabels: true, minStep: 44 });
       } else {
-        drawLine(document.getElementById("hourChart"), view.hourLabels, view.hourCost, view.hourMarks, { minZero: true, showLabels: true, minStep: 40 });
+        drawLine(document.getElementById("hourChart"), view.hour.labels, view.hour.cost, view.hour.marks, { minZero: true, showLabels: true, minStep: 40 });
       }
       if (dayType === "bar") {
         drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true, minStep: 44 });
@@ -392,6 +428,18 @@
     }
     bindToggle("hour-toggle", t => { hourType = t; });
     bindToggle("day-toggle", t => { dayType = t; });
+
+    // 「显示全部数据」开关
+    const balAllEl = document.getElementById("balance-all");
+    if (balAllEl) balAllEl.addEventListener("change", () => {
+      balanceShowAll = balAllEl.checked;
+      if (cache) render(cache);
+    });
+    const hourAllEl = document.getElementById("hour-all");
+    if (hourAllEl) hourAllEl.addEventListener("change", () => {
+      hourShowAll = hourAllEl.checked;
+      if (cache) render(cache);
+    });
 
     async function load() {
       const meta = document.getElementById("meta");
