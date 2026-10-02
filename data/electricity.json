@@ -8951,6 +8951,18 @@
       "consumedCost": 0.82,
       "recharged": false,
       "topup": 0
+    },
+    {
+      "date": "2026-10-02",
+      "day": "2026-10-02",
+      "time": "22:00",
+      "ts": "2026-10-02 22:00",
+      "remainingKwh": 38.66,
+      "remainingMoney": 38.66,
+      "consumedKwh": 0.26,
+      "consumedCost": 0.26,
+      "recharged": false,
+      "topup": 0
     }
   ]
 }
