@@ -607,10 +607,12 @@
       "ts": "2026-09-03 22:00",
       "remainingKwh": 124.24,
       "remainingMoney": 124.24,
-      "consumedKwh": 0,
-      "consumedCost": 0,
+      "consumedKwh": 0.76,
+      "consumedCost": 0.76,
       "recharged": true,
-      "topup": 98.64
+      "topup": 98.64,
+      "rechargeAmount": 100,
+      "rechargeNet": 99.4
     },
     {
       "date": "2026-09-03",
@@ -5695,10 +5697,12 @@
       "ts": "2026-09-21 14:00",
       "remainingKwh": 112.82,
       "remainingMoney": 112.82,
-      "consumedKwh": 0,
-      "consumedCost": 0,
+      "consumedKwh": 0.39,
+      "consumedCost": 0.39,
       "recharged": true,
-      "topup": 99.01
+      "topup": 99.01,
+      "rechargeAmount": 100,
+      "rechargeNet": 99.4
     },
     {
       "date": "2026-09-21",
@@ -10123,10 +10127,12 @@
       "ts": "2026-10-06 23:01",
       "remainingKwh": 117.17,
       "remainingMoney": 117.17,
-      "consumedKwh": 0,
-      "consumedCost": 0,
+      "consumedKwh": 0.13,
+      "consumedCost": 0.13,
       "recharged": true,
-      "topup": 99.27
+      "topup": 99.27,
+      "rechargeAmount": 100,
+      "rechargeNet": 99.4
     },
     {
       "date": "2026-10-07",
@@ -15679,10 +15685,12 @@
       "ts": "2026-10-26 10:00",
       "remainingKwh": 120.79,
       "remainingMoney": 120.79,
-      "consumedKwh": 0,
-      "consumedCost": 0,
+      "consumedKwh": 0.15,
+      "consumedCost": 0.15,
       "recharged": true,
-      "topup": 99.25
+      "topup": 99.25,
+      "rechargeAmount": 100,
+      "rechargeNet": 99.4
     },
     {
       "date": "2026-10-26",
@@ -18309,6 +18317,18 @@
       "remainingMoney": 63.6,
       "consumedKwh": 0.16,
       "consumedCost": 0.16,
+      "recharged": false,
+      "topup": 0
+    },
+    {
+      "date": "2026-11-05",
+      "day": "2026-11-05",
+      "time": "17:00",
+      "ts": "2026-11-05 17:00",
+      "remainingKwh": 63.45,
+      "remainingMoney": 63.45,
+      "consumedKwh": 0.15,
+      "consumedCost": 0.15,
       "recharged": false,
       "topup": 0
     }
