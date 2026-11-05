@@ -7,10 +7,15 @@
  * 触发方式：定时触发器，每小时整点一次（cron：0 0 * * * ? *）。
  *
  * 需要配置的环境变量（在 SCF 的「函数配置 → 环境变量」里填）：
- *   GITHUB_TOKEN  必填，GitHub 细粒度 Token（仅对该仓库 Contents 读写权限）
- *   GITHUB_REPO   选填，仓库名，默认 pear794/electric
- *   GITHUB_BRANCH 选填，分支，默认 main
- *   METER_NO      选填，表号，默认 19500908264
+ *   GITHUB_TOKEN      必填，GitHub 细粒度 Token（仅对该仓库 Contents 读写权限）
+ *   GITHUB_REPO       选填，仓库名，默认 pear794/electric
+ *   GITHUB_BRANCH     选填，分支，默认 main
+ *   METER_NO          选填，表号，默认 19500908264
+ *   RECHARGE_AMOUNTS  选填，充值面额（逗号分隔），默认 50,100
+ *
+ * 充值处理：平台按面额收 0.6% 手续费（充 100 到账 99.4，充 50 到账 49.7）。
+ * 余额上升时，用「到账额 − 余额净增量」反推出这一小时的真实用电，
+ * 因此充值不会再把整小时用电丢掉（见 matchRecharge）。
  */
 
 const http = require("http");
@@ -22,6 +27,16 @@ const BRANCH = process.env.GITHUB_BRANCH || "main";
 const FILE_PATH = "data/electricity.json"; // 仓库内数据文件路径
 const TOKEN = process.env.GITHUB_TOKEN;
 const MAX_RECORDS = 5000; // 最多保留近 ~208 天的每小时数据
+
+// 充值手续费与可选面额：到账 = 面额 × (1 − 0.6%)
+const FEE_RATE = 0.006;
+const RECHARGE_AMOUNTS = (process.env.RECHARGE_AMOUNTS || "50,100")
+  .split(",")
+  .map((s) => Number(s.trim()))
+  .filter((n) => n > 0);
+// 单小时用电的合理上限（元）。用来把「余额净增量」匹配到唯一的面额：
+// 若按错误面额反推，会得到远大于真实用电（几十元）的结果，从而被排除。
+const MAX_HOURLY_COST = 10;
 
 const CNYIOT_URL = `http://www.wap.cnyiot.com/nat/pay.aspx?mid=${METER_NO}`;
 
@@ -138,6 +153,52 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+// 面额候选：单次面额 + 同一小时内两次充值的组合（如同一小时先充 100 又充 50）。
+// 净额相同的候选去重，优先保留单次（如 50+50 与单次 100 无法区分，按 100 记）。
+function rechargeCandidates() {
+  const out = [];
+  const seen = new Set();
+  const add = (amount) => {
+    const net = round2(amount * (1 - FEE_RATE));
+    if (seen.has(net)) return;
+    seen.add(net);
+    out.push({ amount, net });
+  };
+  RECHARGE_AMOUNTS.forEach(add);
+  for (let i = 0; i < RECHARGE_AMOUNTS.length; i++) {
+    for (let j = i; j < RECHARGE_AMOUNTS.length; j++) add(RECHARGE_AMOUNTS[i] + RECHARGE_AMOUNTS[j]);
+  }
+  return out;
+}
+
+// 由余额净增量反推「充值面额 / 到账额 / 该时段真实用电」。
+// 例：充 100 到账 99.4，若余额净增 98.64，则该小时用电 0.76 元。
+// 匹配不到（退费、余额校正、未配置的面额）返回 null，此时保持旧行为：该小时不计消耗。
+function matchRecharge(netIncrease) {
+  for (const c of rechargeCandidates()) {
+    const consumed = round2(c.net - netIncrease);
+    if (consumed >= 0 && consumed <= MAX_HOURLY_COST) {
+      return { amount: c.amount, net: c.net, consumed };
+    }
+  }
+  return null;
+}
+
+// 旧版本把充值小时整段记成 0 消耗。这里按已知面额把真实用电补回去，幂等。
+function repairRechargeRecords(records, pricePerKwh) {
+  for (const r of records) {
+    if (!r || !r.recharged || r.rechargeNet) continue;
+    const netIncrease = Number(r.topup) || 0;
+    if (netIncrease <= 0) continue;
+    const m = matchRecharge(round2(netIncrease));
+    if (!m) continue;
+    r.rechargeAmount = m.amount;
+    r.rechargeNet = m.net;
+    r.consumedKwh = round2(m.consumed / (pricePerKwh || 1));
+    r.consumedCost = m.consumed;
+  }
+}
+
 // "YYYY-MM-DD HH:MM" 转成分钟数，用于计算两次执行间隔
 function tsToMinutes(ts) {
   const parts = ts.split(" ");
@@ -191,21 +252,30 @@ async function main() {
 
   let records = Array.isArray(store.records) ? store.records : [];
   records = dedupeRecords(records); // 先清理历史重复点
+  repairRechargeRecords(records, store.pricePerKwh); // 旧版本丢掉的充值小时用电，按面额补回
   const prev = records.length ? records[records.length - 1] : null;
 
-  // 计算自上一小时以来的消耗。若金额/电量上升 -> 判定为充值（到账净值即余额增加量）。
+  // 计算自上一小时以来的消耗。若金额上升 -> 判定为充值。
+  // 已知面额与手续费时，可反推出到账额与该时段真实用电，而不是把整小时丢弃。
   let consumedKwh = 0;
   let consumedCost = 0;
   let recharged = false;
   let topup = 0;
+  let rechargeAmount = 0;
+  let rechargeNet = 0;
 
   if (prev) {
     const deltaMoney = round2(reading.remainingMoney - prev.remainingMoney);
-    const deltaKwh = round2(reading.remainingKwh - prev.remainingKwh);
     if (deltaMoney > 0) {
-      // 余额上升 = 充值（平台扣手续费后实际到账即余额增加量，如充100到账99.4）
       recharged = true;
       topup = deltaMoney;
+      const m = matchRecharge(deltaMoney);
+      if (m) {
+        rechargeAmount = m.amount;
+        rechargeNet = m.net;
+        consumedCost = m.consumed;
+        consumedKwh = round2(m.consumed / (store.pricePerKwh || 1));
+      }
     } else {
       consumedKwh = round2(prev.remainingKwh - reading.remainingKwh);
       if (consumedKwh < 0) consumedKwh = 0;
@@ -224,6 +294,8 @@ async function main() {
     consumedCost: round2(consumedCost),
     recharged,
     topup: round2(topup),
+    rechargeAmount: rechargeAmount || undefined,
+    rechargeNet: rechargeNet || undefined,
   };
 
   const last = records[records.length - 1];
@@ -258,6 +330,8 @@ async function main() {
     consumedCost,
     recharged,
     topup,
+    rechargeAmount,
+    rechargeNet,
     ts: now.ts,
     records: records.length,
   };

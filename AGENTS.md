@@ -65,8 +65,11 @@ npx serve .          # 或 python -m http.server
 - `records[]` 递增追加，每条代表一次抓取（约每小时一个点）。
 - `remainingKwh` / `remainingMoney`：抓取当时的剩余量，2 位小数。
 - `consumedKwh` / `consumedCost`：**与上一条记录的差值**，不是当日累计。
-- `recharged` / `topup`：金额上升即判定充值，`topup` 是到账净值（如充 100 → 约 99.4）。
-  充值那一小时不计消耗，这是隔离充值影响的核心机制，不要破坏。
+- `recharged` / `topup`：金额上升即判定充值，`topup` 是余额净增量（不是到账面额）。
+  已知面额与 0.6% 手续费（`RECHARGE_AMOUNTS` 环境变量，默认 `50,100`），用
+  `rechargeNet − topup` 反推该小时真实用电写入 `consumedCost`，并记录
+  `rechargeAmount` / `rechargeNet`。匹配不到面额（退费、校正、未配置的面额）时
+  该小时消耗为 0，退化为旧行为。`repairRechargeRecords` 会幂等修补历史记录。
 - `date` / `time`：本次抓取时间；`ts`：`date + " " + time`，旧记录可能缺失。
 - `day`：**费用归属日**，用于处理 00:00 点跨天。当前实现是 `prev.date`，在断档跨天时
   会把数小时消耗错误归到前一天（已知缺陷，见下）。页面用 `r.day || r.date` 兼容旧数据。

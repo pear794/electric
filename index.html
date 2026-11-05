@@ -137,7 +137,7 @@
 
     <section class="panel">
       <h2>每小时用电费用</h2>
-      <div class="sub">每小时的用电费用 = 上一小时余额 − 本小时余额；<b>红点</b> 表示该小时充值（余额上升，不计消耗）</div>
+      <div class="sub">每小时的用电费用 = 上一小时余额 − 本小时余额；<b>红点</b> 表示该小时充值（按到账额反推该小时用电，不丢失）</div>
       <div class="chart-box"><canvas id="hourChart"></canvas></div>
       <div class="chart-type-toggle" id="hour-toggle">
         <button class="ct-btn active" data-type="line">折线</button>
@@ -151,18 +151,18 @@
 
     <section class="panel">
       <h2>每日用电费用</h2>
-      <div class="sub">当天 24 小时用电费用之和；充值当天已隔离充值影响（红色表示当天有过充值）</div>
+      <div class="sub">当天 24 小时用电费用之和；充值当天按到账额反推（红色表示当天有过充值）</div>
       <div class="chart-box"><canvas id="dayChart"></canvas></div>
       <div class="chart-type-toggle" id="day-toggle">
         <button class="ct-btn active" data-type="bar">柱状</button>
         <button class="ct-btn" data-type="line">折线</button>
       </div>
-      <div class="legend-note">说明：每次充值（如充 100 元）平台会收 0.6% 手续费，实际约到账 99.4 元。检测到余额上升即判定为充值，那一小时不计入消耗，从而不影响每天的真实用电统计。</div>
+      <div class="legend-note">说明：每次充值平台收 0.6% 手续费（充 100 到账 99.4，充 50 到账 49.7）。充值那一小时按「到账额 − 余额净增」反推真实用电，所以充值不会污染消耗统计，也不会丢掉该小时的用电。</div>
     </section>
 
     <section class="panel">
       <h2>每月用电费用</h2>
-      <div class="sub">当月每小时电费之和；<b>红柱</b> 表示该月有过充值（充值已隔离，不计入消耗）</div>
+      <div class="sub">当月每小时电费之和；<b>红柱</b> 表示该月有过充值（充值小时用电已按到账额反推）</div>
       <div class="chart-box"><canvas id="monthChart"></canvas></div>
       <div class="chart-type-toggle" id="month-toggle">
         <button class="ct-btn active" data-type="bar">柱状</button>
@@ -405,13 +405,13 @@
       const todayKey = last.day;
       const todayCost = byDate[todayKey] ? byDate[todayKey].cost : 0;
       document.getElementById("c-today").innerHTML = `${fmt(todayCost)}<small>元</small>`;
-      document.getElementById("c-today-recharge").textContent = byDate[todayKey] && byDate[todayKey].recharged ? "今日有充值（已隔离）" : "";
+      document.getElementById("c-today-recharge").textContent = byDate[todayKey] && byDate[todayKey].recharged ? "今日有充值（已按到账额反推）" : "";
 
       // 当月：与"今日"同口径，取最后一条记录所属的月
       const monthKey = last.day.slice(0, 7);
       const monthCost = byMonth[monthKey] ? byMonth[monthKey].cost : 0;
       document.getElementById("c-month").innerHTML = `${fmt(monthCost)}<small>元</small>`;
-      document.getElementById("c-month-recharge").textContent = byMonth[monthKey] && byMonth[monthKey].recharged ? "本月有充值（已隔离）" : "";
+      document.getElementById("c-month-recharge").textContent = byMonth[monthKey] && byMonth[monthKey].recharged ? "本月有充值（已按到账额反推）" : "";
 
       const avg = dailyCost.length ? dailyCost.reduce((a, b) => a + b, 0) / dailyCost.length : 0;
       document.getElementById("c-avg").innerHTML = `${fmt(avg)}<small>元</small>`;
