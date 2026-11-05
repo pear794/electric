@@ -34,6 +34,9 @@
     header h1 { margin: 0; font-size: 19px; font-weight: 700; }
     header p { margin: 6px 0 0; font-size: 12px; opacity: .92; word-break: break-all; }
     .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+    @media (max-width: 639px) { .cards .card:last-child { grid-column: 1 / -1; } }
+    @media (min-width: 640px) and (max-width: 879px) { .cards { grid-template-columns: repeat(3, 1fr); } }
+    @media (min-width: 880px) { .cards { grid-template-columns: repeat(5, 1fr); } }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
@@ -104,7 +107,7 @@
     .switch input:checked + .slider::before { transform: translateX(18px); }
     footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
     .empty { text-align: center; color: var(--muted); padding: 30px 0; font-size: 14px; }
-    @media (min-width: 640px) { .cards { grid-template-columns: repeat(4, 1fr); } }
+
   </style>
 </head>
 <body>
@@ -118,6 +121,7 @@
       <div class="card hl"><div class="label">当前剩余金额</div><div class="value" id="c-balance">–</div></div>
       <div class="card"><div class="label">当前剩余电量</div><div class="value" id="c-kwh">–</div></div>
       <div class="card"><div class="label">今日电费</div><div class="value" id="c-today">–</div><div class="hint" id="c-today-recharge"></div></div>
+      <div class="card"><div class="label">当月电费</div><div class="value" id="c-month">–</div><div class="hint" id="c-month-recharge"></div></div>
       <div class="card"><div class="label">平均每日电费</div><div class="value" id="c-avg">–</div></div>
     </section>
 
@@ -154,6 +158,16 @@
         <button class="ct-btn" data-type="line">折线</button>
       </div>
       <div class="legend-note">说明：每次充值（如充 100 元）平台会收 0.6% 手续费，实际约到账 99.4 元。检测到余额上升即判定为充值，那一小时不计入消耗，从而不影响每天的真实用电统计。</div>
+    </section>
+
+    <section class="panel">
+      <h2>每月用电费用</h2>
+      <div class="sub">当月每小时电费之和；<b>红柱</b> 表示该月有过充值（充值已隔离，不计入消耗）</div>
+      <div class="chart-box"><canvas id="monthChart"></canvas></div>
+      <div class="chart-type-toggle" id="month-toggle">
+        <button class="ct-btn active" data-type="bar">柱状</button>
+        <button class="ct-btn" data-type="line">折线</button>
+      </div>
     </section>
 
     <footer>数据由腾讯云函数 SCF 每小时自动抓取 · 页面托管在 GitHub Pages</footer>
@@ -229,9 +243,13 @@
         ctx.fillText(v.toFixed(2), w - padR + 6, y + 3);
       }
 
-      ctx.textAlign = "center";
       const step = xStep(n);
-      for (let i = 0; i < n; i += step) ctx.fillText(labels[i], toX(i), h - padB + 14);
+      for (let i = 0; i < n; i += step) {
+        if (n === 1) { ctx.textAlign = "center"; ctx.fillText(labels[i], toX(i), h - padB + 14); continue; }
+        // 首尾标签贴边对齐，避免第一个/最后一个标签被裁掉
+        ctx.textAlign = i === 0 ? "left" : (i + step >= n ? "right" : "center");
+        ctx.fillText(labels[i], toX(i), h - padB + 14);
+      }
 
       // 面积
       ctx.beginPath();
@@ -259,7 +277,8 @@
         ctx.font = "10px sans-serif";
         ctx.textAlign = "center";
         for (let i = 0; i < n; i++) {
-          ctx.fillText(values[i].toFixed(2), toX(i), toY(values[i]) - 8);
+          const tx = Math.min(Math.max(toX(i), padL + 16), w - padR - 16);
+          ctx.fillText(values[i].toFixed(2), tx, toY(values[i]) - 8);
         }
       }
     }
@@ -276,7 +295,7 @@
       const top = (Math.max(0, ...values) * 1.15) || 1;
       const toY = v => padT + plotH - (v / top) * plotH;
       const toX = i => padL + ((i + 0.5) / n) * plotW;
-      const barW = Math.max(2, (plotW / n) * 0.6);
+      const barW = Math.min(56, Math.max(2, (plotW / n) * 0.6));
       const baseY = padT + plotH;
 
       // 网格 + 右侧纵轴刻度
@@ -290,9 +309,13 @@
         ctx.fillText(v.toFixed(2), w - padR + 6, y + 3);
       }
 
-      ctx.textAlign = "center";
       const step = xStep(n);
-      for (let i = 0; i < n; i += step) ctx.fillText(labels[i], toX(i), h - padB + 14);
+      for (let i = 0; i < n; i += step) {
+        if (n === 1) { ctx.textAlign = "center"; ctx.fillText(labels[i], toX(i), h - padB + 14); continue; }
+        // 首尾标签贴边对齐，避免第一个/最后一个标签被裁掉
+        ctx.textAlign = i === 0 ? "left" : (i + step >= n ? "right" : "center");
+        ctx.fillText(labels[i], toX(i), h - padB + 14);
+      }
 
       for (let i = 0; i < n; i++) {
         const v = Math.max(0, values[i]);
@@ -320,7 +343,8 @@
         for (let i = 0; i < n; i++) {
           const v = Math.max(0, values[i]);
           const y = toY(v);
-          ctx.fillText(v.toFixed(2), toX(i), y - 4);
+          const tx = Math.min(Math.max(toX(i), padL + 16), w - padR - 16);
+          ctx.fillText(v.toFixed(2), tx, y - 4);
         }
       }
     }
@@ -364,11 +388,30 @@
       const dailyCost = dates.map(dt => Math.round(byDate[dt].cost * 100) / 100);
       const dailyColors = dates.map(dt => byDate[dt].recharged ? RED : BAR);
 
+      // 按月聚合（复用按日结果；月份同样以归属日 day 为准）
+      const byMonth = {};
+      dates.forEach(dt => {
+        const mk = dt.slice(0, 7);
+        if (!byMonth[mk]) byMonth[mk] = { cost: 0, recharged: false };
+        byMonth[mk].cost += byDate[dt].cost;
+        if (byDate[dt].recharged) byMonth[mk].recharged = true;
+      });
+      const months = Object.keys(byMonth).sort();
+      const monthlyCost = months.map(mk => Math.round(byMonth[mk].cost * 100) / 100);
+      const monthlyColors = months.map(mk => byMonth[mk].recharged ? RED : BAR);
+      const monthMarks = months.map(mk => byMonth[mk].recharged ? { color: RED } : null);
+
       // 今日
       const todayKey = last.day;
       const todayCost = byDate[todayKey] ? byDate[todayKey].cost : 0;
       document.getElementById("c-today").innerHTML = `${fmt(todayCost)}<small>元</small>`;
       document.getElementById("c-today-recharge").textContent = byDate[todayKey] && byDate[todayKey].recharged ? "今日有充值（已隔离）" : "";
+
+      // 当月：与"今日"同口径，取最后一条记录所属的月
+      const monthKey = last.day.slice(0, 7);
+      const monthCost = byMonth[monthKey] ? byMonth[monthKey].cost : 0;
+      document.getElementById("c-month").innerHTML = `${fmt(monthCost)}<small>元</small>`;
+      document.getElementById("c-month-recharge").textContent = byMonth[monthKey] && byMonth[monthKey].recharged ? "本月有充值（已隔离）" : "";
 
       const avg = dailyCost.length ? dailyCost.reduce((a, b) => a + b, 0) / dailyCost.length : 0;
       document.getElementById("c-avg").innerHTML = `${fmt(avg)}<small>元</small>`;
@@ -389,6 +432,7 @@
         balance: mkHour(balanceShowAll ? recs : recs.slice(-DFLT_HOURS)),
         hour: mkHour(hourShowAll ? recs : recs.slice(-DFLT_HOURS)),
         dayLabels, dailyCost, dailyColors, dayMarks,
+        monthLabels: months, monthlyCost, monthlyColors, monthMarks,
       };
       drawCharts();
     }
@@ -396,6 +440,7 @@
     let view = null;
     let hourType = "line";   // 每小时用电：默认折线
     let dayType = "bar";     // 每日用电：默认柱状
+    let monthType = "bar";   // 每月用电：默认柱状
     let balanceShowAll = false; // 剩余走势：默认只显示最近两天
     let hourShowAll = false;    // 每小时用电：默认只显示最近两天
 
@@ -411,6 +456,11 @@
         drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true, minStep: 44 });
       } else {
         drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks, { minZero: true, showLabels: true, minStep: 44 });
+      }
+      if (monthType === "bar") {
+        drawBars(document.getElementById("monthChart"), view.monthLabels, view.monthlyCost, view.monthlyColors, { showLabels: true, minStep: 60 });
+      } else {
+        drawLine(document.getElementById("monthChart"), view.monthLabels, view.monthlyCost, view.monthMarks, { minZero: true, showLabels: true, minStep: 60 });
       }
     }
 
@@ -428,6 +478,7 @@
     }
     bindToggle("hour-toggle", t => { hourType = t; });
     bindToggle("day-toggle", t => { dayType = t; });
+    bindToggle("month-toggle", t => { monthType = t; });
 
     // 「显示全部数据」开关
     const balAllEl = document.getElementById("balance-all");
