@@ -20337,6 +20337,18 @@
       "topup": 98.89,
       "rechargeAmount": 100,
       "rechargeNet": 99.4
+    },
+    {
+      "date": "2026-11-12",
+      "day": "2026-11-12",
+      "time": "19:02",
+      "ts": "2026-11-12 19:02",
+      "remainingKwh": 119.18,
+      "remainingMoney": 119.18,
+      "consumedKwh": 0.62,
+      "consumedCost": 0.62,
+      "recharged": false,
+      "topup": 0
     }
   ]
 }
