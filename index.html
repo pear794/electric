@@ -59,6 +59,26 @@
     .panel .sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
     .chart-box { position: relative; width: 100%; height: 260px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .chart-box canvas { display: block; height: 100%; }
+    .chart-tip {
+      position: fixed;
+      z-index: 60;
+      display: none;
+      pointer-events: none;
+      max-width: 260px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: rgba(31, 39, 51, .93);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1.65;
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+      transform: translate(-50%, -100%);
+    }
+    .chart-tip.show { display: block; }
+    .chart-tip b { font-weight: 600; }
+    .chart-tip .tip-time { color: #c3ccda; }
+    .chart-tip .tip-red { color: #ff9d92; }
     .legend-note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
     .chart-type-toggle {
       display: flex;
@@ -173,6 +193,8 @@
     <footer>数据由腾讯云函数 SCF 每小时自动抓取 · 页面托管在 GitHub Pages</footer>
   </div>
 
+  <div id="chart-tip" class="chart-tip"></div>
+
   <script>
     const fmt = (n) => (n === null || n === undefined || isNaN(n)) ? "–" : Number(n).toFixed(2);
     const BLUE = "#0064ff";
@@ -226,6 +248,7 @@
       const padL = 8, padR = 56, padT = 12, padB = 26;
       const plotW = w - padL - padR, plotH = h - padT - padB;
       const n = values.length;
+      canvas._chart = null;
       if (n === 0) return;
 
       const { yMin, yMax } = computeScale(values, opts.minZero);
@@ -281,6 +304,15 @@
           ctx.fillText(values[i].toFixed(2), tx, toY(values[i]) - 8);
         }
       }
+
+      // 记录布局信息，供鼠标悬停 tooltip 使用
+      canvas._chart = {
+        xs: Array.from({ length: n }, (_, i) => toX(i)),
+        values,
+        labels: (opts.fullLabels && opts.fullLabels.length === n) ? opts.fullLabels : labels,
+        kind: opts.tip || "数值",
+        marks: marks || null,
+      };
     }
 
     function drawBars(canvas, labels, values, colors, opts) {
@@ -290,6 +322,7 @@
       const padL = 8, padR = 56, padT = 12, padB = 26;
       const plotW = w - padL - padR, plotH = h - padT - padB;
       const n = values.length;
+      canvas._chart = null;
       if (n === 0) return;
 
       const top = (Math.max(0, ...values) * 1.15) || 1;
@@ -347,6 +380,15 @@
           ctx.fillText(v.toFixed(2), tx, y - 4);
         }
       }
+
+      // 记录布局信息，供鼠标悬停 tooltip 使用
+      canvas._chart = {
+        xs: Array.from({ length: n }, (_, i) => toX(i)),
+        values,
+        labels: (opts.fullLabels && opts.fullLabels.length === n) ? opts.fullLabels : labels,
+        kind: opts.tip || "数值",
+        marks: opts.marks || null,
+      };
     }
 
     // "MM-DD HH:MM" 或 "MM-DD" -> 原样（已按需要缩短）
@@ -420,6 +462,7 @@
       const DFLT_HOURS = 48;
       const mkHour = (list) => ({
         labels: list.map(r => r.ts.slice(5)),
+        ts: list.map(r => r.ts),
         balance: list.map(r => r.remainingMoney),
         cost: list.map(r => r.consumedCost),
         marks: list.map(r => r.recharged ? { color: RED } : null),
@@ -431,7 +474,7 @@
       view = {
         balance: mkHour(balanceShowAll ? recs : recs.slice(-DFLT_HOURS)),
         hour: mkHour(hourShowAll ? recs : recs.slice(-DFLT_HOURS)),
-        dayLabels, dailyCost, dailyColors, dayMarks,
+        dayLabels, dayFull: dates, dailyCost, dailyColors, dayMarks,
         monthLabels: months, monthlyCost, monthlyColors, monthMarks,
       };
       drawCharts();
@@ -446,21 +489,28 @@
 
     function drawCharts() {
       if (!view) return;
-      drawLine(document.getElementById("balanceChart"), view.balance.labels, view.balance.balance, null, { showLabels: true, minStep: 40 });
+      drawLine(document.getElementById("balanceChart"), view.balance.labels, view.balance.balance, null,
+        { showLabels: true, minStep: 40, tip: "剩余金额", fullLabels: view.balance.ts });
       if (hourType === "bar") {
-        drawBars(document.getElementById("hourChart"), view.hour.labels, view.hour.cost, view.hour.barColors, { showLabels: true, minStep: 44 });
+        drawBars(document.getElementById("hourChart"), view.hour.labels, view.hour.cost, view.hour.barColors,
+          { showLabels: true, minStep: 44, tip: "该小时用电", fullLabels: view.hour.ts, marks: view.hour.marks });
       } else {
-        drawLine(document.getElementById("hourChart"), view.hour.labels, view.hour.cost, view.hour.marks, { minZero: true, showLabels: true, minStep: 40 });
+        drawLine(document.getElementById("hourChart"), view.hour.labels, view.hour.cost, view.hour.marks,
+          { minZero: true, showLabels: true, minStep: 40, tip: "该小时用电", fullLabels: view.hour.ts });
       }
       if (dayType === "bar") {
-        drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors, { showLabels: true, minStep: 44 });
+        drawBars(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dailyColors,
+          { showLabels: true, minStep: 44, tip: "该日用电", fullLabels: view.dayFull, marks: view.dayMarks });
       } else {
-        drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks, { minZero: true, showLabels: true, minStep: 44 });
+        drawLine(document.getElementById("dayChart"), view.dayLabels, view.dailyCost, view.dayMarks,
+          { minZero: true, showLabels: true, minStep: 44, tip: "该日用电", fullLabels: view.dayFull });
       }
       if (monthType === "bar") {
-        drawBars(document.getElementById("monthChart"), view.monthLabels, view.monthlyCost, view.monthlyColors, { showLabels: true, minStep: 60 });
+        drawBars(document.getElementById("monthChart"), view.monthLabels, view.monthlyCost, view.monthlyColors,
+          { showLabels: true, minStep: 60, tip: "该月用电", fullLabels: view.monthLabels, marks: view.monthMarks });
       } else {
-        drawLine(document.getElementById("monthChart"), view.monthLabels, view.monthlyCost, view.monthMarks, { minZero: true, showLabels: true, minStep: 60 });
+        drawLine(document.getElementById("monthChart"), view.monthLabels, view.monthlyCost, view.monthMarks,
+          { minZero: true, showLabels: true, minStep: 60, tip: "该月用电", fullLabels: view.monthLabels });
       }
     }
 
@@ -479,6 +529,57 @@
     bindToggle("hour-toggle", t => { hourType = t; });
     bindToggle("day-toggle", t => { dayType = t; });
     bindToggle("month-toggle", t => { monthType = t; });
+
+    // ---- 图表悬停 tooltip：显示具体日期/时间与用量 ----
+    const tipEl = document.getElementById("chart-tip");
+
+    function hideTip() {
+      if (tipEl) tipEl.classList.remove("show");
+    }
+
+    function showTip(canvas, clientX, clientY) {
+      const chart = canvas._chart;
+      if (!chart || !chart.xs || !chart.xs.length) return hideTip();
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      // 找离鼠标最近的采样点（柱中心 / 折线点）
+      let best = -1, bestDist = Infinity;
+      for (let i = 0; i < chart.xs.length; i++) {
+        const d = Math.abs(chart.xs[i] - x);
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      if (best < 0 || bestDist > 40) return hideTip();
+
+      const label = chart.labels[best];
+      const value = Number(chart.values[best]) || 0;
+      const lines = [
+        `<span class="tip-time">${label}</span>`,
+        `${chart.kind} <b>${value.toFixed(2)}</b> 元`,
+      ];
+      if (chart.marks && chart.marks[best]) {
+        lines.push(`<span class="tip-red">${chart.kind === "该月用电" ? "该月有充值" : "该时段有充值"}</span>`);
+      }
+      tipEl.innerHTML = lines.join("<br>");
+      tipEl.classList.add("show");
+
+      // 悬浮在指针上方，并限制在视口内
+      const m = 10;
+      const tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
+      const left = Math.max(m + tw / 2, Math.min(clientX, window.innerWidth - m - tw / 2));
+      const top = Math.max(m + th, clientY - 14);
+      tipEl.style.left = left + "px";
+      tipEl.style.top = top + "px";
+    }
+
+    function bindChartHover(canvas) {
+      if (!canvas) return;
+      canvas.addEventListener("pointermove", (e) => showTip(canvas, e.clientX, e.clientY));
+      canvas.addEventListener("pointerdown", (e) => showTip(canvas, e.clientX, e.clientY));
+      canvas.addEventListener("pointerleave", hideTip);
+      canvas.addEventListener("pointercancel", hideTip);
+      canvas.addEventListener("pointerup", (e) => { if (e.pointerType === "touch") setTimeout(hideTip, 1500); });
+    }
+    ["balanceChart", "hourChart", "dayChart", "monthChart"].forEach(id => bindChartHover(document.getElementById(id)));
 
     // 「显示全部数据」开关
     const balAllEl = document.getElementById("balance-all");
